@@ -1,0 +1,224 @@
+##########################################################################################################################################
+# Nacteni balicku
+################################################################################################################################
+options(java.parameters = "-Xmx8000m")
+library(Metabol)
+
+rm(list=ls(all=TRUE))                       # Prikaz smaze ulozene informace v pameti
+
+################################################################################################
+setwd("D:/Betka/Metabolomika/Data/Labina/Package")   # Zadani cesty ke zdrojovym datum, zde se budou take ukladat vsechny vysledky
+
+name="MCADD"                                                        # Poznamka, ktera se prida do nazvu kazdeho souboru a slozky
+
+dirout = paste(getwd(),"/",name,"/",sep = "")               # Vytvori v zadane ceste slozku s nazvem "name"
+dir.create(dirout, recursive=TRUE, showWarnings = FALSE)
+setwd(dirout)                                               # Nyni jiz pracujeme v nove slozce
+
+################################################################################################################################
+# Nacteni dat
+################################################################################################################################
+# Nacteme tabulku, musi byt serazena podle batche!
+
+#data=read.table("2017-08-17_Koberna_univ_script.csv",header=TRUE,sep = ";")
+data=read.table("MCADD_final.csv",header=TRUE,sep = ";")
+head(data)                      # Zkontrolujeme posunuti, kdyz neni oznaceni sloupcu, pouzijeme nasledujici tri radky
+
+RowNames=data[,1]
+row.names(data)=RowNames
+data=data[,-1]
+head(data)                      # Nahled na novou tabulku se spravnymi nazvy radku
+
+################################################################################################################################
+# Zadavani skupin
+################################################################################################################################
+# Maximalni pocet skupin je 20!!!
+
+groupnames=unique(gsub("[[:digit:]]","",colnames(data)))      # Zjisti nazvy jednotlivych skupin u tabulky serazene podle batche
+groupnames=c("sk1","sk2","sk3","sk4","sk5","sk6","QC")   #Rucni zadani skupin
+
+################################################################################################################################
+################################################################################################################################
+# Preprocessing
+################################################################################################################################
+
+Preproc(data,name,groupnames)
+
+################################################################################################################################
+################################################################################################################################
+# Tvorba grafu
+################################################################################################################################
+
+################################################################################################################################
+# Nacteni dat - tabulka z preprocessingu
+################################################################################################################################
+# Nacteme tabulku
+
+#data=read.table("12_PQN_MCADD.csv",header=TRUE,sep = ";")
+data=read.table("MCADD_final.csv",header=TRUE,sep = ";")
+head(data)                      # Zkontrolujeme posunuti, kdyz neni oznaceni sloupcu, pouzijeme nasledujici tri radky
+
+RowNames=data[,1]
+row.names(data)=RowNames
+data=data[,-1]
+head(data)                      # Nahled na novou tabulku se spravnymi nazvy radku
+
+# Pokud bychom pokracovali z preprocessingu, muzeme pouzit pouze:
+
+data=dataSetM
+groupnames
+
+################################################################################################################################
+# Zadavani skupin
+################################################################################################################################
+# Maximalni pocet skupin je 20!!!
+
+groupnames=unique(gsub("[[:digit:]]","",rownames(data)))      # Zjisti nazvy jednotlivych skupin
+groupnames=c("Control","MCADD")   #Rucni zadani skupin
+
+##################################################################################
+##################################################################################
+# Kontrola podezrelych QC
+##################################################################################
+
+bigQC(data,name,groupnames)
+
+##################################################################################
+##################################################################################
+# Vypsani tabulky s transformovanymi daty
+##################################################################################
+# U vsech funkci se definuje transformace, ktera ma byt pouzita pomoci tsf=c("clr","log","log10","none").
+# Defaultni je "clr".
+
+transf(data,name,tsf="PQN")
+
+##################################################################################
+##################################################################################
+# PCA
+##################################################################################
+# Musi se definovat, zda chcete vykreslit nazvy bodu, znaky anebo oboje a to nastavenim
+# parametru type=c("names","points","both"), default je "points".
+
+GraphsPCA(data,name,groupnames,type="points")
+
+##################################################################################
+##################################################################################
+# PLS-DA a VIP plot
+##################################################################################
+# Musi se definovat, zda chcete vykreslit nazvy bodu, znaky anebo oboje a to nastavenim
+# parametru type=c("names","points","both"), default je "points".
+
+GraphsPLSDA(data,name,groupnames,type="both")
+
+# VIP plot: Vytvari se pro vsechny dvojice skupin, vykresli se vzdy PLSDA pro tyto dve skupiny a VIP ploty
+# "top" oznacuje, kolik meabolitu se zobrazi v zazoomovanem VIP plotu, default je 30.
+
+GraphsVIP(data,name,groupnames,tsf="log")
+
+# Outlier test
+GraphsOutlier(data,name,groupnames,type="pca",tsf="log")
+
+##################################################################################
+##################################################################################
+# OPLS-DA
+##################################################################################
+# Zadej pomoci "top", kolik se ma zvyraznit bodu, "qu" definuje kvantil,
+# defaultni nastaveni je top=30, qu=0.75
+
+GraphsOPLSDA(data,name,groupnames,tsf="log")
+
+# VIP plot
+
+GraphsVIPOPLSDA(data,name,groupnames,tsf="log")
+
+# Permutation test
+GraphsPermut(data,name,groupnames,type="opls",tsf="log")
+
+##################################################################################
+##################################################################################
+# P-value
+##################################################################################
+# Zadej, zda chces normalni t-test (a Wilcoxonuv test) ci parovy pomoci pair=TRUE/FALSE.
+
+Tests(data,name,groupnames)
+
+##################################################################################
+##################################################################################
+# Volcano plot a rozdily medianu
+##################################################################################
+# Zadej, zda chces parametricky ci neparametricky test pomoci type=c("par","nonpar").
+# Cervene se oznaci body, ktere maji vyznamne p-value s pouzitim Bonferroniho korekce.
+# Pokud nechceme pouzit korekci, lze rucne nastavit hy=0.05. Dale mohou byt vyznamne
+# body ohraniceny i na zaklade rozdilu medianu (defaultne zakazano). Pokud chceme pouzit
+# toto, dame hx=TRUE a pomoci parametru hhx=... nastavime pozadovanou hodnotu. Zakladni
+# nastaveni je hhx=1.5.
+
+GraphsVolcano(data,name,groupnames)
+
+##################################################################################
+##################################################################################
+# Boxploty a rozdily medianu
+##################################################################################
+# Lze si nastavit vlastni nazvy bodu pomoci newlabs. Defaultne prebira nazvy vzorku.
+# Pri parovych testech moznost nastaveni paroveho spojeni bodu pomoci pair=TRUE.
+
+GraphsBox(data,name,groupnames)
+
+GraphsViol(data,name,groupnames)
+
+##################################################################################
+##################################################################################
+# Boxploty s p-value v jednom (ty grafy s hvezdickami)
+##################################################################################
+# Zadej, zda chces parametricky ci neparametricky test pomoci type=c("par","nonpar").
+
+GraphsBoxPvalue(data,name,groupnames)
+
+##################################################################################
+##################################################################################
+# Shlukova analyza
+##################################################################################
+
+GraphsClust(data,name,groupnames,tsf="log")
+
+##################################################################################
+##################################################################################
+# ROC krivky
+##################################################################################
+# Zakladni:
+# Pokud je v projektu vice skupin, udela ROC pro vsechny kombinace dvojic.
+
+GraphsROC(data,name,groupnames,tsf="log")
+
+# Nekolik metabolitu dohromady:
+# selm vybira, ktere metabolity zkombinovat, zde 1. a 2. metabolit.
+# selg vybira, ze kteryh skupin je pouzit, defaultne je c(1,2).
+
+GraphsROCcomb(data,name,groupnames,selm=c(1,2))
+
+
+
+
+##################################################################################
+##################################################################################
+# Bonusove kody
+##################################################################################
+# 3D PCA:
+
+GraphsPCA3D(data,name,groupnames,tsf="log")
+
+library(rgl)
+PDF=paste(dirout,"PCA3D_",name,".pdf",sep="")
+rgl.postscript(PDF,fmt="pdf",drawText=TRUE)
+
+##################################################################################
+##################################################################################
+# Korelace a DCS pro jednotlive skupiny
+##################################################################################
+
+GraphsCorr(data,name,groupnames)
+
+GraphsCorrDSC(data,name,groupnames)
+
+
+

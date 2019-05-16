@@ -1,0 +1,22 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1548877262354.000,
+    "dirty" : false,
+    "encoding" : "CP1250",
+    "folds" : "",
+    "hash" : "2207934639",
+    "id" : "5DC3CBE9",
+    "lastKnownWriteTime" : 1548880479,
+    "last_content_update" : 1548880479226,
+    "path" : "D:/Betka/Metabolomika/Data/Labina/Package/permutation_test.R",
+    "project_path" : null,
+    "properties" : {
+        "cursorPosition" : "40,44",
+        "scrollLine" : "23"
+    },
+    "relative_order" : 3,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

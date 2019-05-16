@@ -1,0 +1,16 @@
+Package: Metabol
+Type: Package
+Title: The statistical analysis of metabolomic data
+Version: 1.0.0
+Maintainer: Alzbeta Gardlo <alzbeta.gardlo@gmail.com>
+Description: The package of preprocessing (quality control treatment, zero imputation) and statistical analysis of metabolomic data sets made by logratio methodology. Also comparison with the other transformations/scalings (log, ln, PQN, no transformation, ln(PQN),Pareto scaling) is possible. In graphical part multivariate (PCA, PLS-DA, VIP plots, OPLS-DA, cluster analysis) and univariate (boxplots, ROC curves, volcano plots) analyses are done.
+Depends: openxlsx, sm, ropls
+Imports: compositions,robCompositions,car,pls,dendextend,gplots,rgl,
+        pROC, stats, graphics, grDevices, rrcov, utils
+Author: Alzbeta Gardlo, David Friedecky, Karel Hron, Lukas Najdekr, Radana Karlikova, Tomas Adam 
+License: GPL-2
+LazyData: TRUE
+RoxygenNote: 6.1.1
+BuildManual: yes
+NeedsCompilation: no
+

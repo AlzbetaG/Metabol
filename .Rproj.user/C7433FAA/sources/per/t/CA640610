@@ -1,0 +1,22 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1558031145734.000,
+    "dirty" : false,
+    "encoding" : "CP1250",
+    "folds" : "",
+    "hash" : "2945721987",
+    "id" : "CA640610",
+    "lastKnownWriteTime" : 1558044171,
+    "last_content_update" : 1558044171007,
+    "path" : "D:/Betka/Metabolomika/Data/Labina/Package/Univerzalni_skript_balicek.R",
+    "project_path" : null,
+    "properties" : {
+        "cursorPosition" : "46,0",
+        "scrollLine" : "33"
+    },
+    "relative_order" : 3,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

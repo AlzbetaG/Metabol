@@ -1,0 +1,41 @@
+setwd("D:/Betka/Metabolomika/Data/Labina/Package")   # Zadani cesty ke zdrojovym datum, zde se budou take ukladat vsechny vysledky
+
+#name="Pokus3"
+#name="Pokus4"
+#name="MCpok"
+name="MCADD"
+
+dirout = paste(getwd(),"/",name,"/",sep = "")               # Vytvori v zadane ceste slozku s nazvem "name"
+dir.create(dirout, recursive=TRUE, showWarnings = FALSE)
+setwd(dirout)
+
+#################################################################################
+#data=read.table("11_final_Pokus3.csv",header=TRUE,sep = ";")
+#data=read.table("11_final_Pokus4.csv",header=TRUE,sep = ";")
+#data=read.table("MCpok.csv",header=TRUE,sep = ";")
+#data=read.table("12_MCpok.csv",header=TRUE,sep = ";")
+data=read.table("MCADD_final.csv",header=TRUE,sep = ";")
+head(data)                      # Zkontrolujeme posunuti, kdyz neni oznaceni sloupcu, pouzijeme nasledujici tri radky
+
+RowNames=data[,1]
+row.names(data)=RowNames
+data=data[,-1]
+head(data)
+
+#groupnames=c("sk3","sk7")
+#groupnames=c("BB","AA","CC")
+#groupnames=c("Control","MCADD","Conn","MCC")
+groupnames=c("Control","MCADD")
+
+####################################################################
+library(Metabol)
+GraphsOPLSDA(data,name,groupnames,tsf="none")
+GraphsPermut(data,name,groupnames,type="err",tsf="none")
+GraphsVIP(data,name,groupnames,tsf="none")
+GraphsVIPOPLSDA(data,name,groupnames)
+GraphsOutlier(data,name,groupnames,type="err",tsf="none")
+GraphsPCA(data,name,groupnames,type="both",tsf="none")
+GraphsPLSDA(data,name,groupnames,tsf="none",type="both")
+GraphsVolcano(data,name,groupnames,tsf="none")
+transf(data,name,tsf="PQN")
+GraphsPCA3D(data,name,groupnames,tsf="none")

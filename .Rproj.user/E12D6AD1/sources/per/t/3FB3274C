@@ -1,0 +1,22 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1548880887885.000,
+    "dirty" : false,
+    "encoding" : "CP1250",
+    "folds" : "",
+    "hash" : "2907458031",
+    "id" : "3FB3274C",
+    "lastKnownWriteTime" : 1548795760,
+    "last_content_update" : 1548795760,
+    "path" : "D:/Betka/Metabolomika/Data/Labina/Package/Metabol/R/GraphsBox.R",
+    "project_path" : "R/GraphsBox.R",
+    "properties" : {
+        "cursorPosition" : "88,39",
+        "scrollLine" : "79"
+    },
+    "relative_order" : 3,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

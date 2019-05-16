@@ -1,0 +1,21 @@
+{
+    "collab_server" : "",
+    "contents" : "setwd(\"C:/Users/Alzbetka/Prace/Data/Labina/Package\")\nsystem(\"R CMD Rd2pdf MetaboAnal\")\n",
+    "created" : 1495800406876.000,
+    "dirty" : false,
+    "encoding" : "CP1250",
+    "folds" : "",
+    "hash" : "2364943981",
+    "id" : "6BC4CA15",
+    "lastKnownWriteTime" : 1495115533,
+    "last_content_update" : 1495115533,
+    "path" : "C:/Users/Alzbetka/Prace/Data/Labina/Package/manual.R",
+    "project_path" : null,
+    "properties" : {
+        "tempName" : "Untitled1"
+    },
+    "relative_order" : 2,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

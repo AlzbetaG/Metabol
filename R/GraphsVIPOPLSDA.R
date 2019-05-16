@@ -1,0 +1,895 @@
+#' Orthogonal partial least squares - discriminant analysis (OPLS-DA)
+#'
+#' Makes orthogonal partial least squares - discriminant analysis (OPLS-DA), displays score plots and s-plots.
+#' @param data Data table with variables (metabolites) in columns. Samples in rows are sorted according to specific groups.
+#' @param name A character string or expression indicating a name of data set. It occurs in names of every output.
+#' @param groupnames A character vector defining specific groups in data. Every string must be specific for each group and they must not overlap.
+#' @param tsf Data transformation must be defined by "clr" (default), "log", "log10", "PQN", "lnPQN", "pareto" or "none". See Details.
+#' @param top How many most important variables (in absolute values)  should be highlighted in s-plot? The default is 30.
+#' @param qu Which quantile of the important variables (in absolute values) should be highlighted in s-plot? The default is 0.75.
+#' @param QCs logical. If FALSE (default) quality control samples (QCs) are automatically distinguished and skipped.
+#' @details Data transformation: with "clr" clr trasformation is used (see References), with "log" natural logarithm is used, with "log10" decadic logarithm is used, with "pareto" data are only scaled by Pareto scaling, with "PQN" probabilistic quotient normalization is done, with "lnPQN" natural logarithm of PQN transformed data is done, with "none" no tranformation is done.
+#' @details S-plots can be used only for comparison of two groups. If there is more groups in data, all possible combinations of pairs are evaluated.
+#' @details Up to twenty different groups can be distinguished in data (including QCs).
+#' @return Score plot and s-plots of OPLS-DA.
+#' @return Excel file with s-plot summary for every variable.
+#' @import car
+#' @import rrcov
+#' @import utils
+#' @importFrom stats median prcomp pf cov
+#' @importFrom robCompositions cenLR
+#' @references Aitchison, J. (1986) The Statistical Analysis of Compositional Data Monographs on Statistics and Applied Probability. Chapman & Hall Ltd., London (UK). p. 416.
+#' @references  Gaude, E.et al. (2012) muma: Metabolomics Univariate and Multivariate Analysis. R package version 1.4. \url{https://CRAN.R-project.org/package=muma}
+#' @export
+GraphsVIPOPLSDA=function(data,name,groupnames,tsf="clr",top=30,qu=0.75,QCs=FALSE){
+
+    dirout=getwd()
+
+    ##########################################################################################################################
+    if (tsf=="clr"){
+        dataM=cenLR(data)$x.clr
+    }
+
+    if (tsf=="log"){
+        dataM=log(data)
+    }
+
+    if (tsf=="log10"){
+        dataM=log10(data)
+    }
+
+    if (tsf=="pareto"){
+        dataM=scale(data, scale=TRUE, center=FALSE)
+    }
+
+    PQN1=function (x){
+        xref=apply(x,2,median)
+        podil=x
+        for (i in 1:ncol(x)){
+            podil[,i]=x[,i]/xref[i]
+        }
+        s=apply(podil,1,median)
+        PQN=x
+        for (j in 1:nrow(x)){
+            PQN[j,]=x[j,]/s[j]
+        }
+        return(PQN)
+    }
+
+    if (tsf=="PQN"){
+        dataM=PQN1(data)
+    }
+
+    if (tsf=="lnPQN"){
+        dataM=log(PQN1(data))
+    }
+
+    if (tsf=="none"){
+        dataM=data
+    }
+    #################################################################################################
+    count=length(groupnames)
+    basecolor=c("blue","magenta","forestgreen","darkorange","deepskyblue","mediumaquamarine","lightslateblue","saddlebrown",
+                "gray40","darkslateblue","firebrick","darkcyan","darkmagenta", "deeppink1","limegreen","gold2","bisque2",
+                "lightcyan3","red","darkolivegreen3")           # Basic colours from: http://www.stat.columbia.edu/~tzheng/files/Rcolor.pdf
+    basemarks=c(15,17,18,8,11,2,0,16,5,6,4,10,3,7,9,12)
+
+    Group=matrix(rep(NA,count*3),ncol=3)
+    colnames(Group)=c("min","max","length")
+    rownames(Group)=groupnames
+    groups=NULL
+    marks=NULL
+    color=NULL
+    for (i in 1:count){
+        Gr=grep(groupnames[i],rownames(dataM))
+        Group[i,1]=min(Gr)
+        Group[i,2]=max(Gr)
+        Group[i,3]=length(Gr)
+        gr=rep(i,length(Gr))
+        groups=c(groups,gr)
+        zn=rep(basemarks[i],length(Gr))
+        marks=c(marks,zn)
+        cl=rep(basecolor[i],length(Gr))
+        color=c(color,cl)
+    }
+
+##########################################################################################################################
+if (QCs==FALSE){
+    QC=grep("QC",rownames(dataM))
+    if (length(QC)!=0){
+        dataM=dataM[-QC,]
+        color=color[-QC]
+        marks=marks[-QC]
+        groups=groups[-QC]
+        groupnames=groupnames[unique(groups)]
+        count=length(groupnames)
+        Group=matrix(rep(NA,count*3),ncol=3)
+        colnames(Group)=c("min","max","length")
+        rownames(Group)=groupnames
+        for (i in 1:count){
+            Gr=grep(groupnames[i],rownames(dataM))
+            Group[i,1]=min(Gr)
+            Group[i,2]=max(Gr)
+            Group[i,3]=length(Gr)
+        }
+    }
+}
+
+    ##########################################################################################################################
+
+    dataSetM2=dataM
+    colors=matrix(unique(color),ncol=1)
+
+    #################################################################################################
+    dirout2 = paste(dirout,"/","VIP_OPLSDA",sep = "")
+    dir.create(dirout2, recursive=TRUE, showWarnings = FALSE)        # vytvori v zadane ceste slozku s nazvem "note"
+    setwd(dirout2)
+    #################################################################################################
+    explore.data2=function (file, scaling, scal = TRUE, normalize = FALSE, imputation = FALSE,
+                            imput,color=colors2)
+    {
+        #comp = read.csv("OPLSDA_Data.csv", sep = ";", header = TRUE)
+        comp <- file
+        comp.x = comp[, 3:ncol(comp)]
+        comp.x = cbind(comp[, 2], comp[, 1], comp.x)
+        x <- comp.x
+        x.x <- x[, 3:ncol(x)]
+        rownames(x.x) <- x[, 2]
+        if (!scal) {
+            scaling = ""
+        }
+        dirout = paste(getwd(), "/Preprocessing_Data_", scaling, noteOP,
+                       "/", sep = "")
+        dir.create(dirout)
+        if (imputation) {
+            y = x.x
+            r = is.na(y)
+            for (k in 1:ncol(r)) {
+                vec = matrix(r[, k], ncol = 1)
+                who.miss.rows = which(apply(vec, 1, function(i) {
+                    any(i)
+                }))
+                if (length(who.miss.rows) > nrow(y) * 0.8) {
+                    warning(paste("The variable -", colnames(y)[k],
+                                  "- has a number of missing values > 80%, therefore has been eliminated",
+                                  sep = " "))
+                    y = y[, -k]
+                }
+            }
+            r = is.na(y)
+            who.miss.columns = c()
+            for (i in 1:nrow(y)) {
+                for (j in 1:ncol(y)) {
+                    if (r[i, j] == TRUE) {
+                        if (imput == "mean") {
+                            v2 = matrix(r[, j], ncol = 1)
+                            who.miss.rows = which(apply(v2, 1, function(i) {
+                                any(i)
+                            }))
+                            y[i, j] = mean(y[-who.miss.rows, j])
+                            print(paste("Imputing missing value of variable -",
+                                        colnames(y)[j], "- for the observation -",
+                                        rownames(y)[i], "- with", imput, "value",
+                                        sep = " "))
+                        }
+                        else if (imput == "minimum") {
+                            v2 = matrix(r[, j], ncol = 1)
+                            who.miss.rows = which(apply(v2, 1, function(i) {
+                                any(i)
+                            }))
+                            y[i, j] = min(y[-who.miss.rows, j])
+                            print(paste("Imputing missing value of variable -",
+                                        colnames(y)[j], "- for the observation -",
+                                        rownames(y)[i], "- with", imput, "value",
+                                        sep = " "))
+                        }
+                        else if (imput == "half.minimum") {
+                            v2 = matrix(r[, j], ncol = 1)
+                            who.miss.rows = which(apply(v2, 1, function(i) {
+                                any(i)
+                            }))
+                            y[i, j] = min(y[-who.miss.rows, j])/2
+                            print(paste("Imputing missing value of variable -",
+                                        colnames(y)[j], "- for the observation -",
+                                        rownames(y)[i], "- with", imput, "value",
+                                        sep = " "))
+                        }
+                        else if (imput == "zero") {
+                            v2 = matrix(r[, j], ncol = 1)
+                            who.miss.rows = which(apply(v2, 1, function(i) {
+                                any(i)
+                            }))
+                            y[i, j] = 0
+                            print(paste("Imputing missing value of variable -",
+                                        colnames(y)[j], "- for the observation -",
+                                        rownames(y)[i], "- with", imput, "value",
+                                        sep = " "))
+                        }
+                    }
+                }
+            }
+            pwdi = paste(getwd(), "/Preprocessing_Data_", scaling, noteOP,
+                         "/ImputedMatrix.csv", sep = "")
+            write.csv(y, pwdi)
+            x.x = y
+        }
+        #for (i in 1:nrow(x.x)) {
+        #    for (j in 1:ncol(x.x)) {
+        #        if (x.x[i, j] <= 0) {
+        #            x.x[i, j] = runif(1, 0, 1e-10)
+        #        }
+        #    }
+        #}
+        x.x = cbind(comp[, 2], x.x)
+        write.csv(x.x, paste(dirout, "CorrectedTable.csv", sep = ""))
+        pwd.c = paste(getwd(), "/Preprocessing_Data_", scaling, noteOP, "/CorrectedTable.csv",
+                      sep = "")
+        x <- read.csv(pwd.c, sep = ",", header = TRUE)
+        x.x <- x[, 3:ncol(x)]
+        rownames(x.x) <- x[, 1]
+        k = matrix(x[, 2], ncol = 1)
+        if (normalize) {
+            x.t <- t(x.x)
+            x.s <- matrix(colSums(x.t), nrow = 1)
+            uni = matrix(rep(1, nrow(x.t)), ncol = 1)
+            area.uni <- uni %*% x.s
+            x.areanorm <- x.t/area.uni
+            x.areanorm = t(x.areanorm)
+            write.csv(x.areanorm, paste(dirout, "/ProcessedTable.csv",
+                                        sep = ""))
+        }
+        else {
+            write.csv(x.x, paste(dirout, "/ProcessedTable.csv", sep = ""))
+        }
+        if (scal) {
+            if (scaling == "Pareto" | scaling == "pareto" | scaling ==
+                "P" | scaling == "p") {
+                pwd.n = paste(getwd(), "/Preprocessing_Data_", scaling, noteOP,
+                              "/ProcessedTable.csv", sep = "")
+                x <- read.csv(pwd.n, sep = ",", header = TRUE)
+                x.x <- x[, 2:ncol(x)]
+                rownames(x.x) <- x[, 1]
+                x.areanorm.tc <- scale(x.x, center = TRUE, scale = FALSE)
+                all.sd <- matrix(apply(x.areanorm.tc, 2, sd), nrow = 1)
+                uni.exp.all = matrix(rep(1, nrow(x.areanorm.tc)),
+                                     ncol = 1)
+                all.sdm = uni.exp.all %*% all.sd
+                all.sqsd = sqrt(all.sdm)
+                all.pareto <- x.areanorm.tc/all.sqsd
+                write.csv(all.pareto, paste(dirout, "/ProcessedTable.csv",
+                                            sep = ""))
+            }
+            else if (scaling == "Auto" | scaling == "auto" | scaling ==
+                     "A" | scaling == "a") {
+                pwd.n = paste(getwd(), "/Preprocessing_Data_", scaling, noteOP,
+                              "/ProcessedTable.csv", sep = "")
+                x <- read.csv(pwd.n, sep = ",", header = TRUE)
+                x.x <- x[, 2:ncol(x)]
+                rownames(x.x) <- x[, 1]
+                x.areanorm.tc <- scale(x.x, center = TRUE, scale = FALSE)
+                all.sd <- matrix(apply(x.areanorm.tc, 2, sd), nrow = 1)
+                uni.exp.all = matrix(rep(1, nrow(x.areanorm.tc)),
+                                     ncol = 1)
+                all.sdm = uni.exp.all %*% all.sd
+                all.auto <- x.areanorm.tc/all.sdm
+                write.csv(all.auto, paste(dirout, "/ProcessedTable.csv",
+                                          sep = ""))
+            }
+            else if (scaling == "Vast" | scaling == "vast" | scaling ==
+                     "V" | scaling == "v") {
+                pwd.n = paste(getwd(), "/Preprocessing_Data_", scaling, noteOP,
+                              "/ProcessedTable.csv", sep = "")
+                x <- read.csv(pwd.n, sep = ",", header = TRUE)
+                x.x <- x[, 2:ncol(x)]
+                rownames(x.x) <- x[, 1]
+                x.areanorm.tc <- scale(x.x, center = TRUE, scale = FALSE)
+                all.sd <- matrix(apply(x.areanorm.tc, 2, sd), nrow = 1)
+                uni.exp.all = matrix(rep(1, nrow(x.areanorm.tc)),
+                                     ncol = 1)
+                all.sdm = uni.exp.all %*% all.sd
+                sdm2 = all.sdm^2
+                colm = matrix(colMeans(x.x), nrow = 1)
+                colm.m = uni.exp.all %*% colm
+                num = x.areanorm.tc * colm.m
+                vast = num/sdm2
+                write.csv(vast, paste(dirout, "/ProcessedTable.csv",
+                                      sep = ""))
+            }
+            else if (scaling == "Range" | scaling == "range" | scaling ==
+                     "R" | scaling == "r") {
+                pwd.n = paste(getwd(), "/Preprocessing_Data_", scaling, noteOP,
+                              "/ProcessedTable.csv", sep = "")
+                x <- read.csv(pwd.n, sep = ",", header = TRUE)
+                x.x <- x[, 2:ncol(x)]
+                rownames(x.x) <- x[, 1]
+                x.areanorm.tc <- scale(x.x, center = TRUE, scale = FALSE)
+                range = c()
+                for (i in 1:ncol(x.x)) {
+                    den = c()
+                    den = max(x.x[, i]) - min(x.x[, i])
+                    range = matrix(c(range, den), nrow = 1)
+                }
+                uni.exp.all = matrix(rep(1, nrow(x.areanorm.tc)),
+                                     ncol = 1)
+                range.m = uni.exp.all %*% range
+                all.range = x.areanorm.tc/range.m
+                write.csv(all.range, paste(dirout, "/ProcessedTable.csv",
+                                           sep = ""))
+            }
+            else if (scaling == "Median" | scaling == "median" |
+                     scaling == "M" | scaling == "m") {
+                pwd.n = paste(getwd(), "/Preprocessing_Data_", scaling, noteOP,
+                              "/ProcessedTable.csv", sep = "")
+                x <- read.csv(pwd.n, sep = ",", header = TRUE)
+                x.x <- x[, 2:ncol(x)]
+                rownames(x.x) <- x[, 1]
+                x.areanorm.tc <- scale(x.x, center = TRUE, scale = FALSE)
+                all.med <- matrix(apply(x.areanorm.tc, 2, median),
+                                  nrow = 1)
+                uni.exp.all = matrix(rep(1, nrow(x.areanorm.tc)),
+                                     ncol = 1)
+                all.sdm = uni.exp.all %*% all.med
+                all.med <- x.areanorm.tc/all.sdm
+                write.csv(all.med, paste(dirout, "/ProcessedTable.csv",
+                                         sep = ""))
+            }
+        }
+        else {
+            pwd.n = paste(getwd(), "/Preprocessing_Data_", scaling, noteOP,
+                          "/ProcessedTable.csv", sep = "")
+            x <- read.csv(pwd.n, sep = ",", header = TRUE)
+            x.x <- x[, 2:ncol(x)]
+            rownames(x.x) <- x[, 1]
+            x.c = scale(x.x, scale = FALSE)
+            write.csv(x.c, paste(dirout, "/ProcessedTable.csv", sep = ""))
+        }
+        pwd.scal = paste(getwd(), "/Preprocessing_Data_", scaling, noteOP,
+                         "/ProcessedTable.csv", sep = "")
+        x <- read.csv(pwd.scal, sep = ",", header = TRUE)
+        x.x <- x[, 2:ncol(x)]
+        rownames(x.x) <- x[, 1]
+        pc.all <- prcomp(x.x, center = FALSE, scale = FALSE)
+        p.v <- matrix(((pc.all$sdev^2)/(sum(pc.all$sdev^2))), ncol = 1)
+        p.i <- round(p.v * 100, 1)
+        p.z <- matrix(1, nrow(p.i), 1)
+        p.f <- cbind(p.i, p.z)
+        dirout.pca = paste(getwd(), "/PCA_Data_", scaling, noteOP,"/", sep = "")
+        dir.create(dirout.pca)
+        write.csv(p.f, paste(dirout.pca, "PCA_P", sep = ""))
+        write.csv(pc.all$x, paste(dirout.pca, "PCA_ScoreMatrix.csv",
+                                  sep = ""))
+        write.csv(pc.all$rotation, paste(dirout.pca, "PCA_LoadingsMatrix.csv",
+                                         sep = ""))
+        pwd.score = paste(getwd(), "/PCA_Data_", scaling, noteOP, "/", "PCA_ScoreMatrix.csv",
+                          sep = "")
+        Score <- read.csv(pwd.score, sep = ",", header = TRUE)
+        Score.x <- Score[, 2:ncol(Score)]
+        rownames(Score.x) <- Score[, 1]
+        pwd.load = paste(getwd(), "/PCA_Data_", scaling, noteOP,"/", "PCA_LoadingsMatrix.csv",
+                         sep = "")
+        Loading <- read.csv(pwd.load, sep = ",", header = TRUE)
+        Loading.x <- Loading[, 2:ncol(Loading)]
+        rownames(Loading.x) <- Loading[, 1]
+        pwd.pvar = paste(getwd(), "/PCA_Data_", scaling, noteOP,"/", "PCA_P",
+                         sep = "")
+        Pvar <- read.csv(pwd.pvar, sep = ",", header = TRUE)
+        Pvar.x <- Pvar[, 2:ncol(Pvar)]
+        rownames(Pvar.x) <- Pvar[, 1]
+        barplot(Pvar.x[, 1], xlab = "Principal Components", ylab = "Proportion of Variance explained",
+                main = "Screeplot", ylim = c(0, 100))
+        scree = paste(dirout.pca, "Screeplot", scaling, noteOP, ".pdf", sep = "")
+        dev.copy2pdf(file = scree)
+        #tutticolors = matrix(c(1, 2, 3, 4, 5, 6, "rosybrown4",
+        #                       "green4", "navy", "purple2", "orange", "pink", "chocolate2",
+        #                       "coral3", "khaki3", "thistle", "turquoise3", "palegreen1",
+        #                       "moccasin", "olivedrab3", "azure4", "gold3", "deeppink",7, 8),
+        #                     ncol = 1)
+
+        tutticolors = as.matrix(colors2)
+
+        col = c()
+        for (i in 1:nrow(k)) {
+            col = c(col, tutticolors[k[i, ], ])
+        }
+        pairs = c()
+        if (ncol(Score.x) >= 10) {
+            pairs = c(10)
+        }
+        else {
+            pairs = c(ncol(Score.x))
+        }
+        pairs(Score.x[, 1:pairs], col = col)
+        #dev.new()
+        pairs = paste(dirout.pca, "First_10_Components_", scaling, noteOP,
+                      ".pdf", sep = "")
+        dev.copy2pdf(file = pairs)
+        K = paste(getwd(), "/Preprocessing_Data_", scaling, noteOP,"/class.csv",
+                  sep = "")
+        write.csv(k, K)
+        x.nn = cbind(k, pc.all$x)
+        sorted = x.nn[order(x.nn[, 1]), ]
+        g = c()
+        for (i in 1:nrow(sorted)) {
+            if (any(g == sorted[i, 1])) {
+                g = g
+            }
+            else {
+                g = matrix(c(g, sorted[i, 1]), ncol = 1)
+            }
+        }
+        dirout.g = paste(getwd(), "/Groups_",noteOP, sep = "")
+        dir.create(dirout.g)
+        for (i in 1:nrow(g)) {
+            vuota <- c()
+            fin = matrix(rep(NA, ncol(sorted)), nrow = 1)
+            for (j in 1:nrow(sorted)) {
+                if (sorted[j, 1] == i) {
+                    vuota <- matrix(sorted[j, ], nrow = 1)
+                    rownames(vuota) = rownames(sorted)[j]
+                    fin = rbind(fin, vuota)
+                }
+            }
+            nam = paste("r", i, sep = ".")
+            n = matrix(fin[-1, ], ncol = ncol(sorted))
+            n.x = matrix(n[, -1], ncol = ncol(sorted) - 1)
+            name = as.matrix(assign(nam, n.x))
+            outputfileg = paste("r.", i, ".csv", sep = "")
+            write.csv(name, paste(dirout.g, outputfileg, sep = "/"),
+                      row.names = FALSE)
+        }
+        all.F = c()
+        NoF = nrow(g)
+        for (i in 1:NoF) {
+            for (j in 1:NoF) {
+                if (i < j) {
+                    ni = paste("r.", i, ".csv", sep = "")
+                    nj = paste("r.", j, ".csv", sep = "")
+                    pwdi = paste(getwd(), "/Groups_",noteOP,"/", ni, sep = "")
+                    pwdj = paste(getwd(), "/Groups_",noteOP,"/", nj, sep = "")
+                    I = read.csv(pwdi, header = TRUE)
+                    J = read.csv(pwdj, header = TRUE)
+                    fin = ncol(I) - 1
+
+                    ntest = factorial(fin)/(2 * (factorial(fin -
+                                                               2)))
+                    T2 = c()
+                    nam = c()
+                    for (k in 1:fin) {
+                        for (l in 1:fin) {
+                            if (k < l) {
+                                Ikl = cbind(I[, k], I[, l])
+                                Jkl = cbind(J[, k], J[, l])
+                                t1 = matrix(T2.test(Ikl, Jkl)$statistic,
+                                            ncol = 2)
+                                t2 = c(t1[, 1])
+                                T2 = matrix(c(T2, t2), ncol = 1)
+                                rownam = paste("PC", k, "vsPC", l, sep = "")
+                                nam = matrix(c(nam, rownam), ncol = 1)
+                            }
+                        }
+                    }
+                    pair = paste("T2statistic_", i, "vs", j, sep = "")
+                    rownames(T2) = nam
+                    colnames(T2)[1] = pair
+                    num = nrow(I) + nrow(J) - 3
+                    den = 2 * (nrow(I) + nrow(J) - 2)
+                    coeff = num/den
+                    Fval = T2 * coeff
+                    Fvalname = paste("F_statistic_", i, "vs", j,
+                                     sep = "")
+                    colnames(Fval)[1] = Fvalname
+                    Fpval = pf(Fval, 2, num)
+                    Fname = paste("F_pvalue_", i, "vs", j, sep = "")
+                    colnames(Fpval)[1] = Fname
+                    Fpvalfin = 1 - Fpval
+                    all.F = matrix(c(all.F, Fpvalfin))
+                }
+            }
+        }
+        varp = c()
+        for (k in 1:fin) {
+            for (l in 1:fin) {
+                if (k < l) {
+                    varp = matrix(c(varp, p.f[k, 1] + p.f[l, 1]),
+                                  ncol = 1)
+                }
+            }
+        }
+        ncomparison = factorial(nrow(g))/(2 * (factorial(nrow(g) -
+                                                             2)))
+        all.F = matrix(all.F, ncol = ncomparison)
+        rownames(all.F) = nam
+        allFpwd = paste(getwd(), "/PCA_Data_", scaling, noteOP, "/PCs_Fstatistic.csv",
+                        sep = "")
+        write.csv(all.F, allFpwd, row.names = FALSE)
+        sum = matrix(rowSums(all.F), ncol = 1)
+        all = data.frame(nam, sum, varp)
+        colnames(all)[3] = "Variance(%)"
+        colnames(all)[2] = "Sum_p_values"
+        colnames(all)[1] = "Pair_of_PCs"
+        ord.sum = all[order(all[, 2]), ]
+        colnames(ord.sum)[3] = "Variance(%)"
+        colnames(ord.sum)[2] = "Sum_p_values(F_statistics)"
+        colnames(ord.sum)[1] = "Pair_of_PCs"
+        rownames(ord.sum) = 1:nrow(ord.sum)
+        rankFpwd = paste(getwd(), "/PCA_Data_", scaling, noteOP, "/PCs_ranked_Fpvalue.csv",
+                         sep = "")
+        write.csv(ord.sum, rankFpwd, row.names = FALSE)
+        print("Pairs of Principal Components giving highest statistical cluster separation are:")
+        print(ord.sum[1:5, ])
+    }
+
+    ##############################################################################################################################################
+
+    OPLSDA2=function (scaling,top="",qu="",color=colors2,marks,groupnames)
+    {
+        pwd.x = paste(getwd(), "/Preprocessing_Data_", scaling, noteOP, "/ProcessedTable.csv",
+                      sep = "")
+        x = read.csv(pwd.x, header = TRUE)
+        x.x = x[, 2:ncol(x)]
+        rownames(x.x) = x[, 1]
+        pwdK = paste(getwd(), "/Preprocessing_Data_", scaling, noteOP, "/class.csv",
+                     sep = "")
+        k = read.csv(pwdK, header = TRUE)
+        k.x = matrix(k[, -1], ncol = 1)
+        x.n = cbind(k.x, x.x)
+        sorted = x.n[order(x.n[, 1]), ]
+        k = matrix(sorted[, 1], ncol = 1)
+        g = c()
+        for (i in 1:nrow(sorted)) {
+            if (any(g == sorted[i, 1])) {
+                g = g
+            }
+            else {
+                g = matrix(c(g, sorted[i, 1]), ncol = 1)
+            }
+        }
+        Y = matrix(rep(NA, nrow(sorted)), ncol = 1)
+        for (i in 1:nrow(sorted)) {
+            for (l in 1:2) {
+                if (sorted[i, 1] == l) {
+                    Y[i, ] = 0
+                }
+                else {
+                    Y[i, ] = 1
+                }
+            }
+        }
+        X = as.matrix(sorted[, -1], ncol = ncol(sorted) - 1)
+        nf = 1
+        T = c()
+        P = c()
+        C = c()
+        W = c()
+        Tortho = c()
+        Portho = c()
+        Wortho = c()
+        Cortho = c()
+        for (j in 1:nf) {
+            w = (t(X) %*% Y) %*% solve(t(Y) %*% Y)
+            w1 = t(w) %*% w
+            w2 = abs(sqrt(w1))
+            w = w %*% solve(w2)
+            t = (X %*% w) %*% solve(t(w) %*% w)
+            t1 = t(t) %*% t
+            c = t(Y) %*% t %*% solve(t1)
+            c1 = t(c) %*% c
+            u = Y %*% c %*% solve(c1)
+            u1 = t(u) %*% u
+            u2 = abs(sqrt(u1))
+            p = (t(X) %*% t) %*% solve(t1)
+            wortho = p - w
+            wortho1 = t(wortho) %*% wortho
+            wortho2 = abs(sqrt(abs(wortho1)))
+            wortho = wortho %*% solve(wortho2)
+            tortho = X %*% wortho %*% solve(t(wortho) %*% wortho)
+            tortho1 = t(tortho) %*% tortho
+            portho = t(X) %*% tortho %*% solve(tortho1)
+            cortho = t(Y) %*% tortho %*% solve(tortho1)
+            X = X - tortho %*% t(portho)
+            T = matrix(c(T, t))
+            P = matrix(c(P, p))
+            C = matrix(c(C, c))
+            W = matrix(c(W, w))
+            Tortho = matrix(c(Tortho, tortho))
+            Portho = matrix(c(Portho, portho))
+            Wortho = matrix(c(Wortho, wortho))
+            Cortho = matrix(c(Cortho, cortho))
+        }
+        T = matrix(T, ncol = nf)
+        T = scale(T, scale = FALSE, center = TRUE)
+        P = matrix(P, ncol = nf)
+        C = matrix(C, ncol = nf)
+        W = matrix(W, ncol = nf)
+        Tortho = matrix(Tortho, ncol = nf)
+        Portho = matrix(Portho, ncol = nf)
+        Cortho = matrix(Cortho, ncol = nf)
+        Wortho = matrix(Wortho, ncol = nf)
+        Xortho = Tortho %*% t(Portho)
+        max.pc1 = 1.3 * (max(abs(T[, nf])))
+        max.pc2 = 1.3 * (max(abs(Tortho[, nf])))
+        lim = c()
+        if (max.pc1 > max.pc2) {
+            lim = c(-max.pc1, max.pc1)
+        }
+        else {
+            lim = c(-max.pc2, max.pc2)
+        }
+        #tutticolors = matrix(c("darkgreen","blue","magenta","darkorange3", 5, 6, "rosybrown4",
+        #                       "green4", "navy", "purple2", "orange", "pink", "chocolate2",
+        #                       "coral3", "khaki3", "thistle", "turquoise3", "palegreen1",
+        #                       "moccasin", "olivedrab3", "azure4", "gold3", "deeppink",7, 8),
+        #                     ncol = 1)
+
+        tutticolors = as.matrix(colors2)
+
+        col = c()
+        for (i in 1:nrow(k)) {
+            col = c(col, tutticolors[k[i, ], ])
+        }
+        plot(T[, nf], Tortho[, 1], col = col, pch = marks2 , cex=2, xlim = lim,
+             ylim = lim, xlab = "T score [1]", ylab = "Orthogonal T score [1]",
+             main = "OPLS-DA score scatter plot")
+        text(T[, nf], Tortho[, 1], col = col, labels = rownames(sorted),
+             cex = 0.5, pos = 1)
+        axis(1, at = lim * 2, pos = c(0, 0), labels = FALSE, col = "grey",
+             lwd = 0.7)
+        axis(2, at = lim * 2, pos = c(0, 0), labels = FALSE, col = "grey",
+             lwd = 0.7)
+        legend("topleft",legend = groupnames2, pch = unique(marks2), col=color,cex=1)
+
+        dataEllipse(T[, nf], Tortho[, 1], levels = c(0.95), add = TRUE,
+                    col = "black", lwd = 0.4, plot.points = FALSE, center.cex = 0.2)
+        dirout = paste(getwd(), "/OPLS-DA", scaling, " - ",noteOP,"/", sep = "")
+        dir.create(dirout)
+        pwdxdef = paste(dirout, "X_deflated.csv", sep = "")
+        write.csv(X, pwdxdef)
+        scor = paste(dirout, "ScorePlot_OPLS-DA_", scaling, " - ",noteOP, ".pdf",
+                     sep = "")
+        dev.copy2pdf(file = scor)
+        pwdT = paste(dirout, "TScore_Matrix.csv", sep = "")
+        write.csv(T, pwdT)
+        pwdTortho = paste(dirout, "TorthoScore_Matrix.csv", sep = "")
+        write.csv(T, pwdTortho)
+        s = as.matrix(sorted[, -1], ncol = ncol(sorted) - 1)
+        p1 = c()
+        for (i in 1:ncol(s)) {
+            scov = cov(s[, i], T)
+            p1 = matrix(c(p1, scov), ncol = 1)
+        }
+        pcorr1 = c()
+        for (i in 1:nrow(p1)) {
+            den = apply(T, 2, sd) * sd(s[, i])
+            corr1 = p1[i, ]/den
+            pcorr1 = matrix(c(pcorr1, corr1), ncol = 1)
+        }
+        pwdp1 = paste(dirout, "p1_Matrix.csv", sep = "")
+        write.csv(p1, pwdp1)
+        pwdpcorr1 = paste(dirout, "pcorr1_Matrix.csv", sep = "")
+        write.csv(pcorr1, pwdpcorr1)
+
+        MSn=cbind(p1,abs(p1),pcorr1,abs(pcorr1))
+        rownames(MSn)=colnames(x.x) # shoud be same as dataSetM2
+        colnames(MSn)=c("p1","abs_p1","p1_corr","abs_p1_corr")
+        pwdpMSn = paste(dirout, "S-plot_list of mz - ",noteOP,".csv", sep = "")
+        write.table(MSn,pwdpMSn,sep=";")
+
+        #top:
+        top=top
+        sorMSnt=MSn[order(-MSn[,4]),]
+        sortMSnt=sorMSnt[1:top,]
+        pwdpMSnsortt = paste(dirout, "S-plot_list of mz_top - ",noteOP,".csv", sep = "")
+        write.table(sortMSnt,pwdpMSnsortt,sep=";")
+
+        p1t=sortMSnt[,1]
+        pcorr1t=sortMSnt[,3]
+
+        #quantile:
+        qu=qu
+        MSnq=quantile(MSn[,4],qu)
+        sorMSnq=which(sorMSnt[,4]>=MSnq)
+        sortMSnq=sorMSnt[sorMSnq,]
+        pwdpMSnsortq = paste(dirout, "S-plot_list of mz_quantile - ",noteOP,".csv", sep = "")
+        write.table(sortMSnq,pwdpMSnsortq,sep=";")
+
+        p1q=sortMSnq[,1]
+        pcorr1q=sortMSnq[,3]
+
+        #dev.new()
+        plot(p1, pcorr1, xlab = "p[1]", ylab = "p(corr)[1]", main = paste("S-plot (OPLS-DA) ",
+                                                                          scaling, sep = ""), pch=16, cex=0.5)
+        text(p1, pcorr1, labels = colnames(s), cex = 0.5, pos = 1, offset=0.2, col="navy")
+        splot = paste(dirout, "SPlot_OPLS-DA_", scaling," - ",noteOP, ".pdf",
+                      sep = "")
+        dev.copy2pdf(file = splot,width=15, height=10)
+
+        #barevny S_plot - top:
+        #dev.new()
+        plot(p1, pcorr1, xlab = "p[1]", ylab = "p(corr)[1]", main = paste("S-plot (OPLS-DA) ",scaling, sep = ""), pch=16, cex=0.5)
+        points(p1t,pcorr1t,col="red",pch=16,cex=0.6)
+        legend("topleft",legend = paste("n=", top ),cex=1)
+        text(p1, pcorr1, labels = colnames(s), cex = 0.5, pos = 1, offset=0.2, col="navy")
+        text(p1t, pcorr1t, labels = rownames(sortMSnt), cex = 0.5, pos = 1, offset=0.2, col="red")
+        splotsortt = paste(dirout, "SPlot_OPLS-DA_top_", scaling," - ",noteOP, ".pdf",
+                           sep = "")
+        dev.copy2pdf(file = splotsortt,width=15, height=10)
+
+        #barevny S_plot - quantile:
+        #dev.new()
+        plot(p1, pcorr1, xlab = "p[1]", ylab = "p(corr)[1]", main = paste("S-plot (OPLS-DA) ",scaling, sep = ""), pch=16, cex=0.5)
+        points(p1q,pcorr1q,col="red",pch=16,cex=0.6)
+        legend("topleft",legend = c(paste("n=", length(rownames(sortMSnq))),paste(qu*100,"% quantile")),cex=1)
+        text(p1, pcorr1, labels = colnames(s), cex = 0.5, pos = 1, offset=0.2, col="navy")
+        text(p1q, pcorr1q, labels = rownames(sortMSnq), cex = 0.5, pos = 1, offset=0.2, col="red")
+        splotsortq = paste(dirout, "SPlot_OPLS-DA_quantile_", scaling," - ",noteOP, ".pdf",
+                           sep = "")
+        dev.copy2pdf(file = splotsortq,width=15, height=10)
+
+
+        pc.all <- prcomp(X, center = FALSE, scale = FALSE)
+        p.v <- matrix(((pc.all$sdev^2)/(sum(pc.all$sdev^2))), ncol = 1)
+        p.i <- round(p.v * 100, 1)
+        p.z <- matrix(1, nrow(p.i), 1)
+        p.f <- cbind(p.i, p.z)
+        dirout.pca = paste(dirout, "PCA_OPLS/", sep = "")
+        dir.create(dirout.pca)
+        write.csv(p.f, paste(dirout.pca, "PCA_P_OPLS", sep = ""))
+        write.csv(pc.all$x, paste(dirout.pca, "PCA_OPLS_ScoreMatrix.csv",
+                                  sep = ""))
+        write.csv(pc.all$rotation, paste(dirout.pca, "PCA_OPLS_LoadingsMatrix.csv",
+                                         sep = ""))
+        cum = p.f[1, 1] + p.f[2, 1]
+        lim = c()
+        max.pc1 = 1.3 * (max(abs(pc.all$x[, 1])))
+        max.pc2 = 1.3 * (max(abs(pc.all$x[, 2])))
+        if (max.pc1 > max.pc2) {
+            lim = c(-max.pc1, max.pc1)
+        }
+        else {
+            lim = c(-max.pc2, max.pc2)
+        }
+        pca <- paste("PC1 (", p.f[1, 1], ") %")
+        pcb <- paste("PC2 (", p.f[2, 1], ") %")
+        xlab = c(pca)
+        ylab = c(pcb)
+        D <- paste(dirout.pca, "PCA_OPLS_ScorePlot.pdf", sep = "")
+        pdf(D)
+        plot(pc.all$x[, 1], pc.all$x[, 2], col = col, xlab = xlab,
+             ylab = ylab, xlim = lim, ylim = lim, pch = marks2, cex=2, sub = paste("Cumulative Proportion of Variance Explained = ",
+                                                                                   cum, "%", sep = ""), main = "PCA Score Plot on orthogonal-deflated X")
+        axis(1, at = lim * 2, pos = c(0, 0), labels = FALSE, col = "grey",
+             lwd = 0.7)
+        axis(2, at = lim * 2, pos = c(0, 0), labels = FALSE, col = "grey",
+             lwd = 0.7)
+        legend("topleft",legend = groupnames2, pch = unique(marks2), col = unique(col),cex=1)
+
+        dataEllipse(pc.all$x[, 1], pc.all$x[, 2], levels = c(0.95),
+                    add = TRUE, col = "black", lwd = 0.4, plot.points = FALSE,
+                    center.cex = 0.2)
+        text(pc.all$x[, 1], pc.all$x[, 2], col = col, cex = 0.5,
+             labels = rownames(sorted), pos = 1)
+        dev.off()
+        pca.load <- paste("Loading PC1 (", p.f[1, 1], ") %")
+        pcb.load <- paste("Loading PC2 (", p.f[2, 1], ") %")
+        Max.pc1 = 1.1 * (max(pc.all$rotation[, 1]))
+        Min.pc1 = 1.1 * (min(pc.all$rotation[, 1]))
+        Mpc1 = c(Min.pc1 * 2, Max.pc1 * 2)
+        Max.pc2 = 1.1 * (max(pc.all$rotation[, 2]))
+        Min.pc2 = 1.1 * (min(pc.all$rotation[, 2]))
+        Mpc2 = c(Min.pc2 * 2, Max.pc2 * 2)
+        E = paste(dirout.pca, "PCA_OPLS_LoadingPlot.pdf", sep = "")
+        pdf(E)
+        plot(pc.all$rotation[, 1], pc.all$rotation[, 2], xlab = pca.load,
+             ylab = pcb.load, xlim = c(Min.pc1, Max.pc1), ylim = c(Min.pc2,
+                                                                   Max.pc2), main = "PCA Loading Plot on orthogonal-deflated X",
+             sub = paste("Cumulative Proportion of Variance Explained = ",
+                         cum, "%", sep = ""))
+        axis(1, at = Mpc1, pos = c(0, 0), labels = FALSE, col = "grey",
+             lwd = 0.7)
+        axis(2, at = Mpc2, pos = c(0, 0), labels = FALSE, col = "grey",
+             lwd = 0.7)
+        text(pc.all$rotation[, 1], pc.all$rotation[, 2], labels = rownames(pc.all$rotation),
+             cex = 0.6, pos = 1)
+        dev.off()
+
+        return(invisible(p1))
+        }
+
+#######################################################################################
+
+for (i in 1:(count-1)){
+    for (j in (i+1):count){
+        PDF2=paste("VIPO_all_",name,"_",groupnames[i],"_",groupnames[j],".pdf",sep="")
+        PDF3=paste("VIPO_top_",name,"_",groupnames[i],"_",groupnames[j],".pdf",sep="")
+
+        OP=c(rep(1,Group[i,3]),rep(2,Group[j,3]))
+        dataOP=cbind(OP,dataSetM2[c((Group[i,1]:Group[i,2]),(Group[j,1]:Group[j,2])),])
+        colors2=color[c(Group[i,1],Group[j,1])]
+        marks2=marks[c((Group[i,1]:Group[i,2]),(Group[j,1]:Group[j,2]))]
+        groupnames2=groupnames[c(i,j)]
+        r.names=row.names(dataOP)
+        dataOP=data.frame(cbind(r.names,dataOP))
+        row.names(dataOP)=NULL
+        noteOP=paste(name,"_",groupnames[i],"_",groupnames[j],sep="")
+        explore.data2(dataOP, scaling="p",scal=TRUE, normalize = FALSE, imputation = FALSE,color=colors2)
+        p1=OPLSDA2("p",top=top,qu=qu,color=colors2,marks2,groupnames2)
+
+        dataOP2=dataSetM2[c((Group[i,1]:Group[i,2]),(Group[j,1]:Group[j,2])),]
+        OP2=c(rep(0,Group[i,3]),rep(1,Group[j,3]))
+        randOPLSDA=opls(dataOP2,OP2,predI=1,orthoI=1,plotL=FALSE,scaleC="pareto",printL=FALSE)
+        vip=getVipVn(randOPLSDA)
+
+        vipmean=matrix(vip,ncol=ncol(dataOP2))
+        colnames(vipmean)=colnames(dataOP2)
+
+        ycon=rep(0,length(which(OP2==0)))
+        ycon2=rep(1,length(which(OP2==1)))
+
+        BE=matrix(rep(NA,length(ycon)*length(ycon2)*ncol(dataOP2)),ncol=ncol(dataOP2))
+        k=1
+        for(m in 1:length(ycon)){
+            for(n in 1:length(ycon2)){
+                testX=dataOP2[-c(m,length(ycon)+n),]
+                testY=c(ycon[-m],ycon2[-n])
+                testOPLSDA=opls(testX,testY,predI=1,orthoI=1,plotL=FALSE,scaleC="pareto",printL=FALSE)
+                BE[k,]=getVipVn(testOPLSDA)
+                k=k+1
+            }
+        }
+
+        sdbeta=matrix(apply(BE,2,sd),ncol=ncol(dataOP2))
+        matice=rbind(vipmean,sdbeta,t(p1))
+
+        matice=matice[,order(matice[1,],decreasing =TRUE)]
+
+        vipmean=matice[1,]
+        sdbeta=matice[2,]
+        p1=matice[3,]
+        maxy=max(vipmean)+1.75*max(sdbeta)
+
+        colorc=unique(colors2)[1]
+        colorp=unique(colors2)[2]
+        ccolor=rep(0,ncol(matice))
+        for(l in 1:ncol(matice)){
+            if (p1[l]>=0){ccolor[l]=colorc}
+            else ccolor[l]=colorp
+        }
+
+        pdf((PDF2),height=10,width=round((length(colnames(data))/8),digits = 0))
+        bar=barplot(vipmean,ylim=c(0,maxy),main=paste("VIP plot - ",name, sep=""), ylab="VIP",col=ccolor,cex.names=0.75,las=2)
+        segments(bar, vipmean - sdbeta, bar, vipmean + sdbeta, lwd=1)
+        segments(bar - 0.1, vipmean - sdbeta, bar + 0.1, vipmean - sdbeta, lwd=1)
+        segments(bar - 0.1, vipmean + sdbeta, bar + 0.1, vipmean + sdbeta, lwd=1)
+        legend("topright",legend = groupnames2, pch = 16, col = unique(colors2))
+        dev.off()
+
+        rownames(matice)=c("Mean VIP","Sd VIP","p1")
+
+        write.xlsx(t(matice),file = paste("VIP_",name,"_",groupnames[i],"_",groupnames[j],".xlsx", sep=""),
+                   sheetName=paste(groupnames[i],"_",groupnames[j],sep=""),
+                   col.names=TRUE, row.names=TRUE, append=FALSE, showNA=TRUE)
+
+        vipmean=vipmean[1:top]
+        sdbeta=sdbeta[1:top]
+
+        pdf((PDF3),width=15,height=10)
+        par(mar=c(11,4.5,1,0))
+        bar=barplot(vipmean,width=rep(0.25,8),xlim=c(0,10),ylim=c(0,maxy),ylab="VIP",col=ccolor[1:top],cex.names=1.2,las=2,main="VIP score",cex.axis=1.5,cex=1.5,cex.lab=1.5)
+        segments(bar, vipmean - sdbeta, bar, vipmean + sdbeta, lwd=1)
+        segments(bar - 0.1, vipmean - sdbeta, bar + 0.1, vipmean - sdbeta, lwd=1)
+        segments(bar - 0.1, vipmean + sdbeta, bar + 0.1, vipmean + sdbeta, lwd=1)
+        legend("topright",legend = groupnames2, pch = 16, col = unique(colors2))
+        dev.off()
+
+        remove(OP)
+        remove(OP2)
+        remove(dataOP)
+        remove(dataOP2)
+        remove(noteOP)
+        remove(r.names)
+        dev.off()
+    }
+}
+
+    setwd(dirout)
+}

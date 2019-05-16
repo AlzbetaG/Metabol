@@ -1,0 +1,370 @@
+#' Boxplots
+#'
+#' Display 5 variants of boxplots in PDF files for every variable (metabolite) in data table separately.
+#' @param data Data table with variables (metabolites) in columns. Samples in rows are sorted according to specific groups.
+#' @param name A character string or expression indicating a name of data set. It occurs in names of every output.
+#' @param groupnames A character vector defining specific groups in data. Every string must be specific for each group and they must not overlap.
+#' @param tsf Data transformation must be defined by "clr" (default), "log", "log10", "PQN", "pareto" or "none". See Details.
+#' @param QCs logical. If FALSE (default) quality control samples (QCs) are automatically distinguished and skipped.
+#' @param newlabs logical. If FALSE (default) standard names are used. If vector of characters then the new names of points in boxplots are drawn.
+#' @param pair logical. If TRUE then the paired boxplots are drawn. Deaful is FALSE.
+#' @details Data transformation: with "clr" clr trasformation is used (see References), with "log" natural logarithm is used, with "log10" decadic logarithm is used, with "pareto" data are only scaled by Pareto scaling, with "PQN" probabilistic quotient normalization is done, with "none" no tranformation is done.
+#' @details Up to twenty different groups can be distinguished in data (including QCs).
+#' @return Boxplot graphs.
+#' @return Excel file with medians and differences of these medians of all groups in data.
+#' @import graphics
+#' @import grDevices
+#' @import xlsx
+#' @importFrom robCompositions cenLR
+#' @references Aitchison, J. (1986) The Statistical Analysis of Compositional Data Monographs on Statistics and Applied Probability. Chapman & Hall Ltd., London (UK). p. 416.
+#' @examples data=metabol
+#' name="Metabolomics"    #name of the project
+#' groupnames=c("Con","Pat","QC")
+#' GraphsBox(data,name,groupnames)
+#' @export
+GraphsBox=function(data,name,groupnames,tsf="clr",QCs=FALSE,newlabs=FALSE,pair=FALSE){
+
+    dirout = getwd()
+    dirout2 = paste(dirout,"/","Boxplots",sep = "")
+    dir.create(dirout2, recursive=TRUE, showWarnings = FALSE)        # vytvori v zadane ceste slozku s nazvem "note"
+    setwd(dirout2)
+
+    ##########################################################################################################################
+    if (tsf=="clr"){
+        dataM=cenLR(data)$x.clr
+    }
+
+    if (tsf=="log"){
+        dataM=log(data)
+    }
+
+    if (tsf=="log10"){
+        dataM=log10(data)
+    }
+
+    if (tsf=="pareto"){
+        dataM=scale(data, scale=TRUE, center=FALSE)
+    }
+
+    if (tsf=="PQN"){
+        PQN1=function (x){
+            xref=apply(x,2,median)
+            podil=x
+            for (i in 1:ncol(x)){
+                podil[,i]=x[,i]/xref[i]
+            }
+            s=apply(podil,1,median)
+            PQN=x
+            for (j in 1:nrow(x)){
+                PQN[j,]=x[j,]/s[j]
+            }
+            return(PQN)
+        }
+        dataM=PQN1(data)
+    }
+
+    if (tsf=="none"){
+        dataM=data
+    }
+    ##################################################################################
+    count=length(groupnames)
+    basecolor=c("blue","magenta","forestgreen","darkorange","deepskyblue","mediumaquamarine","lightslateblue","saddlebrown",
+                "gray40","darkslateblue","firebrick","darkcyan","darkmagenta", "deeppink1","limegreen","gold2","bisque2",
+                "lightcyan3","red","darkolivegreen3")           # Basic colours from: http://www.stat.columbia.edu/~tzheng/files/Rcolor.pdf
+    basemarks=c(15,17,18,8,11,2,0,16,5,6,4,10,3,7,9,12)
+
+    Group=matrix(rep(NA,count*3),ncol=3)
+    colnames(Group)=c("min","max","length")
+    rownames(Group)=groupnames
+    groups=NULL
+    marks=NULL
+    color=NULL
+    for (i in 1:count){
+        Gr=grep(groupnames[i],rownames(dataM))
+        Group[i,1]=min(Gr)
+        Group[i,2]=max(Gr)
+        Group[i,3]=length(Gr)
+        gr=rep(i,length(Gr))
+        groups=c(groups,gr)
+        zn=rep(basemarks[i],length(Gr))
+        marks=c(marks,zn)
+        cl=rep(basecolor[i],length(Gr))
+        color=c(color,cl)
+    }
+
+############################################################################################
+    if (count < 6){
+        wid=10
+    }
+
+    if (count > 5 & count < 9){
+        wid=15
+    }
+
+    if (count > 8){
+        wid=20
+    }
+
+##################################################################################
+dataSet=dataM
+
+names<-colnames(dataSet)
+##################################################################################
+if (pair== TRUE) {
+    #paired boxplots
+
+    PDF1=paste("Box_pair_notch_simple_",name,".pdf",sep="")
+    PDF2=paste("Box_pair_points_",name,".pdf",sep="")
+    PDF3=paste("Box_pair_names_",name,".pdf",sep="")
+    PDF4=paste("Box_pair_notch_names_",name,".pdf",sep="")
+    PDF5=paste("Box_pair_notch_points_",name,".pdf",sep="")
+
+    wb <- createWorkbook(type = "xlsx")
+    sheet1  <- createSheet(wb, sheetName = "Med")
+    sheet2  <- createSheet(wb, sheetName = "Diff of med")
+
+    file00=paste("Box_pair_",name,".xlsx",sep="")
+
+    ############################################################################################
+    if (newlabs== TRUE) {
+        labels = newlabs
+    }else{
+        labels=rownames(dataSet)
+    }
+    ############################################################################################
+    pdf((PDF1),width=wid,height=5)
+    par(mar = c(4, 4, 6, 4) + 0.1,oma=c(1,1,1,1))
+
+    med=matrix(c(rep(0,ncol(dataSet)*length(unique(groups)))),nrow=ncol(dataSet))
+    rownames(med)=colnames(dataSet)
+    colnames(med)=groupnames
+
+    for(i in 1:ncol(dataSet)){
+        b=boxplot(dataSet[,i] ~ groups, names=groupnames,main=names[i],notch=TRUE,col=unique(color))
+        med[i,]=b$stats[3,]
+    }
+    dev.off()
+
+    addDataFrame(med, sheet1, col.names=TRUE, row.names=TRUE,
+                 startRow=1, startColumn=1, colStyle=NULL, colnamesStyle=NULL,
+                 rownamesStyle=NULL, showNA=FALSE, characterNA="", byrow=FALSE)
+
+    rozdily=NULL
+    for(i in 1:(ncol(med)-1)){
+        a=med[,i]
+        for(j in (i+1):ncol(med)){
+            b=med[,j]
+            c=a-b
+            rozdily=cbind(rozdily,c)
+        }
+    }
+
+    nazvy=NULL
+    for(i in 1:(ncol(med)-1)){
+        for(j in (i+1):ncol(med)){
+            col=paste(groupnames[i],"_",groupnames[j],sep="")
+            nazvy=c(nazvy,col)
+        }
+    }
+
+    colnames(rozdily)=nazvy
+
+    addDataFrame(rozdily, sheet2, col.names=TRUE, row.names=TRUE,
+                 startRow=1, startColumn=1, colStyle=NULL, colnamesStyle=NULL,
+                 rownamesStyle=NULL, showNA=FALSE, characterNA="", byrow=FALSE)
+    saveWorkbook(wb, file = file00)
+
+    pdf((PDF2),width=wid,height=10)
+    par(mar = c(4, 4, 6, 4) + 0.1,oma=c(1,1,1,1))
+
+    for(i in 1:ncol(dataSet)){
+        ma=max(dataSet[,i])+0.035
+        mi=min(dataSet[,i])-0.01
+        boxplot(dataSet[,i] ~ groups, names=groupnames,main=names[i],outpch = NA,cex.axis=1.25,ylim=c(mi,ma))
+        stripchart(dataSet[,i] ~ groups, vertical = TRUE, method = "overplot",pch = unique(marks), col = unique(color), add = TRUE)
+        segments(rep(1,Group[1,3]),dataSet[c(Group[1,1]:Group[1,2]),i],rep(2,Group[2,3]),dataSet[c(Group[2,1]:Group[2,2]),i],col=1,lwd=0.5)
+    }
+    dev.off()
+
+    pdf((PDF3),width=wid,height=10)
+    par(mar = c(4, 4, 6, 4) + 0.1,oma=c(1,1,1,1))
+
+    for(i in 1:ncol(dataSet)){
+        boxplot(dataSet[,i] ~ groups,names=groupnames, main=names[i],cex=0.5,outpch=NA)
+        par(new=TRUE)
+        text(groups,dataSet[,i],label=labels,col="red")
+        segments(rep(1,Group[1,3]),dataSet[c(Group[1,1]:Group[1,2]),i],rep(2,Group[2,3]),dataSet[c(Group[2,1]:Group[2,2]),i],col=1,lwd=0.5)
+    }
+    dev.off()
+
+    pdf((PDF4),width=wid,height=10)
+    par(mar = c(4, 4, 6, 4) + 0.1,oma=c(1,1,1,1))
+
+    for(i in 1:ncol(dataSet)){
+        b=boxplot(dataSet[,i] ~ groups, names=groupnames,main=names[i],notch=TRUE,col=unique(color),outpch = NA)
+        text(groups,dataSet[,i],label=labels,col="black")
+        segments(rep(1,Group[1,3]),dataSet[c(Group[1,1]:Group[1,2]),i],rep(2,Group[2,3]),dataSet[c(Group[2,1]:Group[2,2]),i],col=1,lwd=0.5)
+    }
+    dev.off()
+
+
+    pdf((PDF5),width=wid,height=10)
+    par(mar = c(4, 4, 6, 4) + 0.1,oma=c(1,1,1,1))
+
+    for(i in 1:ncol(dataSet)){
+        b=boxplot(dataSet[,i] ~ groups, names=groupnames,main=names[i],notch=TRUE,outpch = NA)
+        stripchart(dataSet[,i] ~ groups, vertical = TRUE, method = "overplot",pch = unique(marks), col = unique(color), add = TRUE)
+        segments(rep(1,Group[1,3]),dataSet[c(Group[1,1]:Group[1,2]),i],rep(2,Group[2,3]),dataSet[c(Group[2,1]:Group[2,2]),i],col=1,lwd=0.5)
+    }
+    dev.off()
+}
+
+else{
+    ##################################################################################
+    #unpaired
+
+    if (newlabs== TRUE) {
+        labels = newlabs
+    }else{
+        labels=rownames(dataSet)
+    }
+
+##########################################################################################################################
+if (QCs==FALSE){
+        QC=grep("QC",rownames(dataSet))
+    if (length(QC)!=0){
+        dataall=dataSet
+        colorall=color
+        marksall=marks
+        groupsall=groups
+        groupnamesall=groupnames
+        labelsall=labels
+
+        dataSet=dataall[-QC,]
+        color=colorall[-QC]
+        marks=marksall[-QC]
+        groups=groupsall[-QC]
+        groupnames=groupnamesall[unique(groups)]
+        labels=labelsall[-QC]
+
+        PDFQC=paste("Box_QC_",name,".pdf",sep="")
+
+        pdf((PDFQC),width=wid,height=10)
+        par(mar = c(4, 4, 6, 4) + 0.1,oma=c(1,1,1,1))
+
+        for(i in 1:ncol(dataall)){
+            b=boxplot(dataall[,i] ~ groupsall, names=groupnamesall,main=names[i],notch=TRUE,outpch = NA)
+            stripchart(dataall[,i] ~ groupsall, vertical = TRUE, method = "jitter",pch = unique(marksall), col = unique(colorall), add = TRUE)
+        }
+        dev.off()
+
+        count=length(groupnames)
+        groups=NULL
+        for (i in 1:count){
+            Gr=grep(groupnames[i],rownames(dataSet))
+            gr=rep(i,length(Gr))
+            groups=c(groups,gr)
+        }
+    }
+    }
+
+    PDF1=paste("Box_notch_simple_",name,".pdf",sep="")
+    PDF2=paste("Box_points_",name,".pdf",sep="")
+    PDF3=paste("Box_names_",name,".pdf",sep="")
+    PDF4=paste("Box_notch_names_",name,".pdf",sep="")
+    PDF5=paste("Box_notch_points_",name,".pdf",sep="")
+
+    wb <- createWorkbook(type = "xlsx")
+    sheet1  <- createSheet(wb, sheetName = "Med")
+    sheet2  <- createSheet(wb, sheetName = "Diff of med")
+
+    file00=paste("Box_",name,".xlsx",sep="")
+    ############################################################################################
+
+
+pdf((PDF1),width=wid,height=10)
+par(mar = c(4, 4, 6, 4) + 0.1,oma=c(1,1,1,1))
+
+med=matrix(c(rep(0,ncol(dataSet)*length(unique(groups)))),nrow=ncol(dataSet))
+rownames(med)=colnames(dataSet)
+colnames(med)=groupnames
+
+for(i in 1:ncol(dataSet)){
+    b=boxplot(dataSet[,i] ~ groups, names=groupnames,main=names[i],notch=TRUE,col=unique(color))
+    med[i,]=b$stats[3,]
+}
+dev.off()
+
+addDataFrame(med, sheet1, col.names=TRUE, row.names=TRUE,
+             startRow=1, startColumn=1, colStyle=NULL, colnamesStyle=NULL,
+             rownamesStyle=NULL, showNA=FALSE, characterNA="", byrow=FALSE)
+
+rozdily=NULL
+for(i in 1:(ncol(med)-1)){
+    a=med[,i]
+    for(j in (i+1):ncol(med)){
+        b=med[,j]
+        c=a-b
+        rozdily=cbind(rozdily,c)
+    }
+}
+
+nazvy=NULL
+for(i in 1:(ncol(med)-1)){
+    for(j in (i+1):ncol(med)){
+        col=paste(groupnames[i],"_",groupnames[j],sep="")
+        nazvy=c(nazvy,col)
+    }
+}
+
+colnames(rozdily)=nazvy
+
+addDataFrame(rozdily, sheet2, col.names=TRUE, row.names=TRUE,
+             startRow=1, startColumn=1, colStyle=NULL, colnamesStyle=NULL,
+             rownamesStyle=NULL, showNA=FALSE, characterNA="", byrow=FALSE)
+saveWorkbook(wb, file = file00)
+
+pdf((PDF2),width=wid,height=10)
+par(mar = c(4, 4, 6, 4) + 0.1,oma=c(1,1,1,1))
+
+for(i in 1:ncol(dataSet)){
+  ma=max(dataSet[,i])+0.035
+  mi=min(dataSet[,i])-0.01
+  boxplot(dataSet[,i] ~ groups, names=groupnames,main=names[i],outpch = NA,cex.axis=1.25,ylim=c(mi,ma))
+  stripchart(dataSet[,i] ~ groups, vertical = TRUE, method = "jitter",pch = unique(marks), col = unique(color), add = TRUE)
+}
+dev.off()
+
+pdf((PDF3),width=wid,height=10)
+par(mar = c(4, 4, 6, 4) + 0.1,oma=c(1,1,1,1))
+
+for(i in 1:ncol(dataSet)){
+    boxplot(dataSet[,i] ~ groups,names=groupnames, main=names[i],cex=0.5,outpch=NA)
+    text(groups,dataSet[,i],label=labels,col="red")
+}
+dev.off()
+
+pdf((PDF4),width=wid,height=10)
+par(mar = c(4, 4, 6, 4) + 0.1,oma=c(1,1,1,1))
+
+for(i in 1:ncol(dataSet)){
+    b=boxplot(dataSet[,i] ~ groups, names=groupnames,main=names[i],notch=TRUE,col=unique(color),outpch = NA)
+    text(groups,dataSet[,i],label=labels,col="black")
+}
+dev.off()
+
+
+pdf((PDF5),width=wid,height=10)
+par(mar = c(4, 4, 6, 4) + 0.1,oma=c(1,1,1,1))
+
+for(i in 1:ncol(dataSet)){
+    b=boxplot(dataSet[,i] ~ groups, names=groupnames,main=names[i],notch=TRUE,outpch = NA)
+    stripchart(dataSet[,i] ~ groups, vertical = TRUE, method = "jitter",pch = unique(marks), col = unique(color), add = TRUE)
+}
+dev.off()
+}
+
+setwd(dirout)
+}
+
+
