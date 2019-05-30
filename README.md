@@ -1,7 +1,7 @@
 # Metabol
 The package of preprocessing and statistical analysis of metabolomic data sets made by logratio methodology.
 
-![Image](https://zenodo.org/badge/188906403.svg)
+[![DOI](https://zenodo.org/badge/188906403.svg)](https://zenodo.org/badge/latestdoi/188906403)
 
 What is it?
 -----------
